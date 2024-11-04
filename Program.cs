@@ -30,30 +30,35 @@ namespace ACETreeGenerator
             return current_id++;
         }
 
+        static void StartTransaction(StringWriter writer)
+        {
+            writer.WriteLine("START TRANSACTION;");
+        }
+
+        static void EndTransaction(StringWriter writer)
+        {
+            writer.WriteLine("COMMIT;");
+        }
+
         static string QueryForReset()
         {
-            return @$"
-                delete from ace_shard.character where id >= {object_id_start};
-                delete from ace_shard.biota where id >= {object_id_start};
-                delete from ace_shard.biota_properties_string where Object_Id >= {object_id_start};
-                delete from ace_shard.biota_properties_int where Object_Id >= {object_id_start};
-                delete from ace_shard.biota_properties_i_i_d where Object_Id >= {object_id_start};
-                ";
+            return @$"DELETE FROM ace_shard.character WHERE id >= {object_id_start};
+DELETE FROM ace_shard.biota WHERE id >= {object_id_start};
+DELETE FROM ace_shard.biota_properties_string WHERE Object_Id >= {object_id_start};
+DELETE FROM ace_shard.biota_properties_int WHERE Object_Id >= {object_id_start};
+DELETE FROM ace_shard.biota_properties_i_i_d WHERE Object_Id >= {object_id_start};";
         }
 
         static string QueryForNode(uint id, string name, uint patron_id, uint monarch_id)
         {
-            return @$"insert into ace_shard.character (id, account_Id, name, is_Plussed, is_Deleted) values ('{id}', '{account_id}', '{name}', 0, 0);
-                insert into ace_shard.biota (id, weenie_Class_Id, weenie_Type) values ('{id}', '1', '10');
-
-                insert into ace_shard.biota_properties_string (object_Id, type, value) values ('{id}', '1', '{name}');
-                insert into ace_shard.biota_properties_int (object_Id, type, value) values ('{id}', '188', '{heritage_id}');
-                insert into ace_shard.biota_properties_int (object_Id, type, value) values ('{id}', '113', '{gender_id}');
-                insert into ace_shard.biota_properties_int (object_Id, type, value) values ('{id}', '25', '{character_level}');
-
-                insert into ace_shard.biota_properties_i_i_d (object_Id, type, value) values ({id}, 25, {patron_id});
-                insert into ace_shard.biota_properties_i_i_d (object_Id, type, value) values ({id}, 26, {monarch_id});
-                ";
+            return @$"INSERT INTO ace_shard.character (id, account_Id, name, is_Plussed, is_Deleted) VALUES ('{id}', '{account_id}', '{name}', 0, 0);
+INSERT INTO  ace_shard.biota (id, weenie_Class_Id, weenie_Type) VALUES ('{id}', '1', '10');
+INSERT INTO  ace_shard.biota_properties_string (object_Id, type, value) VALUES ('{id}', '1', '{name}');
+INSERT INTO  ace_shard.biota_properties_int (object_Id, type, value) VALUES ('{id}', '188', '{heritage_id}');
+INSERT INTO  ace_shard.biota_properties_int (object_Id, type, value) VALUES ('{id}', '113', '{gender_id}');
+INSERT INTO  ace_shard.biota_properties_int (object_Id, type, value) VALUES ('{id}', '25', '{character_level}');
+INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({id}, 25, {patron_id});
+INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({id}, 26, {monarch_id});";
         }
 
         static void CreateNode(StringWriter writer, uint depth, uint id, string name, uint patron_id, uint monarch_id)
@@ -77,12 +82,12 @@ namespace ACETreeGenerator
             Console.WriteLine("Creating tree...");
 
             StringWriter stringWriter = new StringWriter();
+            StartTransaction(stringWriter);
             stringWriter.WriteLine(QueryForReset());
 
             uint id = GetId();
             CreateNode(stringWriter, 1, id, $"{name_prefix}{id}", monarch_id, monarch_id);
-
-
+            EndTransaction(stringWriter);
             string path = "tree.sql";
 
             using (StreamWriter streamWriter = new StreamWriter(path))
