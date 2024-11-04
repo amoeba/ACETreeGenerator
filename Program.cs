@@ -16,7 +16,7 @@ namespace ACETreeGenerator
         // Create a character on that account and set the id here
         static uint monarch_id = 1342177290;
         // Choose this as you like
-        static uint max_depth = 10;
+        static uint max_depth = 15;
 
         // Configuration you don't have to change
         static string name_prefix = "Z"; // Names are "{name_prefix}{id}"
@@ -35,11 +35,13 @@ namespace ACETreeGenerator
 
         static void ResetOurWork(MySqlConnection connection)
         {
-            Console.WriteLine("Reset");
+            Console.WriteLine("Deleting any old work...");
 
             string query = @$"
                 delete from ace_shard.character where id >= {object_id_start};
                 delete from ace_shard.biota where id >= {object_id_start};
+                delete from ace_shard.biota_properties_string where Object_Id >= {object_id_start};
+                delete from ace_shard.biota_properties_int where Object_Id >= {object_id_start};
                 delete from ace_shard.biota_properties_i_i_d where Object_Id >= {object_id_start};
                 ";
 
@@ -52,6 +54,8 @@ namespace ACETreeGenerator
             {
                 Console.WriteLine(ex.Message);
             }
+
+            Console.WriteLine("...Done.");
         }
 
         public static void CreateNode(MySqlConnection connection, uint depth, uint id, string name, uint patron_id, uint monarch_id)
@@ -66,7 +70,7 @@ namespace ACETreeGenerator
             Console.WriteLine($"CreateNode at depth {depth} for {id}, patron {patron_id}");
 
             string query = @$"
-                insert into ace_shard.character  (id, account_Id, name, is_Plussed, is_Deleted) values ('{id}', '{account_id}', '{name}', 0, 0);
+                insert into ace_shard.character (id, account_Id, name, is_Plussed, is_Deleted) values ('{id}', '{account_id}', '{name}', 0, 0);
                 insert into ace_shard.biota (id, weenie_Class_Id, weenie_Type) values ('{id}', '1', '10');
 
                 insert into ace_shard.biota_properties_string (object_Id, type, value) values ('{id}', '1', '{name}');
@@ -95,19 +99,44 @@ namespace ACETreeGenerator
             CreateNode(connection, depth + 1, id_right, $"{name_prefix}{id_right}", id, monarch_id);
         }
 
+        static int GetNumCharactersInserted(MySqlConnection connection)
+        {
+            string query = @$"
+                SELECT count(1) as count 
+                FROM ace_shard.character
+                WHERE id >= {object_id_start};";
+
+            var reader = new MySqlCommand(query, connection).ExecuteReader();
+            reader.Read();
+            var n = reader.GetInt32("count");
+
+            return n;
+        }
+
         static void Run()
         {
+            Console.WriteLine("Setting up database connection...");
             using var connection = new MySqlConnection(connectionString);
             connection.Open();
+            Console.WriteLine("...Done.");
 
             // We delete everything we did on any previous run
             ResetOurWork(connection);
 
+            Console.WriteLine("Starting creation processs. This can take a long time...");
+            var started_at = DateTime.Now;
+
             // This recurses up to max_depth
             uint id = GetId();
             CreateNode(connection, 1, id, $"{name_prefix}{id}", monarch_id, monarch_id);
+            
+            var ended_at = DateTime.Now;
+            TimeSpan elapsed = ended_at - started_at;
 
-            Console.WriteLine("Done!");
+            var n = GetNumCharactersInserted(connection);
+            Console.WriteLine($"Inserted {n} character(s) in {elapsed.TotalSeconds:F2} seconds.");
+
+            Console.WriteLine("All Done!");
         }
 
         static void Main(string[] args)
