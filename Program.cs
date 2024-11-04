@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Xml.Linq;
-using MySqlConnector;
+﻿using MySqlConnector;
 
 namespace ACETreeGenerator
 {
@@ -10,7 +7,7 @@ namespace ACETreeGenerator
         // Configuration you must change
         //
         // Set up your database credentials here
-        static string connectionString = "Server=127.0.0.1;User ID=root;Database=ace_shard";
+        static string connectionString = "server=127.0.0.1;user=root;password=;database=ace_shard;applicationname=acetreegenerator";
         // Create an account and set it here
         static uint account_id = 2;
         // Create a character on that account and set the id here
@@ -33,44 +30,20 @@ namespace ACETreeGenerator
             return current_id++;
         }
 
-        static void ResetOurWork(MySqlConnection connection)
+        static string QueryForReset()
         {
-            Console.WriteLine("Deleting any old work...");
-
-            string query = @$"
+            return @$"
                 delete from ace_shard.character where id >= {object_id_start};
                 delete from ace_shard.biota where id >= {object_id_start};
                 delete from ace_shard.biota_properties_string where Object_Id >= {object_id_start};
                 delete from ace_shard.biota_properties_int where Object_Id >= {object_id_start};
                 delete from ace_shard.biota_properties_i_i_d where Object_Id >= {object_id_start};
                 ";
-
-            try
-            {
-                var insert_character = new MySqlCommand(query, connection).ExecuteNonQuery();
-                Console.WriteLine($"Deleted {insert_character} rows.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-
-            Console.WriteLine("...Done.");
         }
 
-        public static void CreateNode(MySqlConnection connection, uint depth, uint id, string name, uint patron_id, uint monarch_id)
+        static string QueryForNode(uint id, string name, uint patron_id, uint monarch_id)
         {
-            // This is the stop condition and terminates all recursion
-            if (depth > max_depth)
-            {
-                Console.WriteLine($"Quitting due to hitting max_depth of {max_depth};");
-                return;
-            }
-
-            Console.WriteLine($"CreateNode at depth {depth} for {id}, patron {patron_id}");
-
-            string query = @$"
-                insert into ace_shard.character (id, account_Id, name, is_Plussed, is_Deleted) values ('{id}', '{account_id}', '{name}', 0, 0);
+            return @$"insert into ace_shard.character (id, account_Id, name, is_Plussed, is_Deleted) values ('{id}', '{account_id}', '{name}', 0, 0);
                 insert into ace_shard.biota (id, weenie_Class_Id, weenie_Type) values ('{id}', '1', '10');
 
                 insert into ace_shard.biota_properties_string (object_Id, type, value) values ('{id}', '1', '{name}');
@@ -81,69 +54,78 @@ namespace ACETreeGenerator
                 insert into ace_shard.biota_properties_i_i_d (object_Id, type, value) values ({id}, 25, {patron_id});
                 insert into ace_shard.biota_properties_i_i_d (object_Id, type, value) values ({id}, 26, {monarch_id});
                 ";
+        }
 
-            try
+        static void CreateNode(StringWriter writer, uint depth, uint id, string name, uint patron_id, uint monarch_id)
+        {
+            if (depth > max_depth)
             {
-                var insert_character = new MySqlCommand(query, connection).ExecuteNonQuery();
-                Console.WriteLine($"Inserted {insert_character} rows;");
+                return;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
+
+            writer.WriteLine(QueryForNode(id, name, patron_id, monarch_id));
 
             // Create two vassals for this node
             uint id_left = GetId();
             uint id_right = GetId();
-            CreateNode(connection, depth + 1, id_left, $"{name_prefix}{id_left}", id, monarch_id);
-            CreateNode(connection, depth + 1, id_right, $"{name_prefix}{id_right}", id, monarch_id);
+            CreateNode(writer, depth + 1, id_left, $"{name_prefix}{id_left}", id, monarch_id);
+            CreateNode(writer, depth + 1, id_right, $"{name_prefix}{id_right}", id, monarch_id);
         }
 
-        static int GetNumCharactersInserted(MySqlConnection connection)
+        static void RunMain()
         {
-            string query = @$"
-                SELECT count(1) as count 
-                FROM ace_shard.character
-                WHERE id >= {object_id_start};";
+            Console.WriteLine("Creating tree...");
 
-            var reader = new MySqlCommand(query, connection).ExecuteReader();
-            reader.Read();
-            var n = reader.GetInt32("count");
+            StringWriter stringWriter = new StringWriter();
+            stringWriter.WriteLine(QueryForReset());
 
-            return n;
-        }
-
-        static void Run()
-        {
-            Console.WriteLine("Setting up database connection...");
-            using var connection = new MySqlConnection(connectionString);
-            connection.Open();
-            Console.WriteLine("...Done.");
-
-            // We delete everything we did on any previous run
-            ResetOurWork(connection);
-
-            Console.WriteLine("Starting creation processs. This can take a long time...");
-            var started_at = DateTime.Now;
-
-            // This recurses up to max_depth
             uint id = GetId();
-            CreateNode(connection, 1, id, $"{name_prefix}{id}", monarch_id, monarch_id);
-            
-            var ended_at = DateTime.Now;
-            TimeSpan elapsed = ended_at - started_at;
+            CreateNode(stringWriter, 1, id, $"{name_prefix}{id}", monarch_id, monarch_id);
 
-            var n = GetNumCharactersInserted(connection);
-            Console.WriteLine($"Inserted {n} character(s) in {elapsed.TotalSeconds:F2} seconds.");
 
-            Console.WriteLine("All Done!");
+            string path = "tree.sql";
+
+            using (StreamWriter streamWriter = new StreamWriter(path))
+            {
+                stringWriter.Flush(); // Just in case
+                streamWriter.Write(stringWriter.ToString());
+            }
+
+            Console.WriteLine("...Tree created.");
+            Console.WriteLine("Inserting into database...");
+
+            using (var connection = new MySqlConnection(connectionString))
+            {
+                connection.Open();
+
+                using (MySqlTransaction transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        using (var cmd = new MySqlCommand(stringWriter.ToString(), connection, transaction))
+                        {
+                            var rows = cmd.ExecuteNonQuery();
+                            Console.WriteLine($"Insert query affected {rows} rows.");
+                        }
+                    }
+                    catch (MySqlException ex)
+                    {
+                        Console.WriteLine($"Error executing query: {ex.Message}");
+                        throw;
+                    }
+
+                    transaction.Commit();
+                }
+            }
+
+            Console.WriteLine("Done!");
         }
 
         static void Main(string[] args)
         {
             try
             {
-                Run();
+                RunMain();
             }
             catch (Exception ex)
             {
