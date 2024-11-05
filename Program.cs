@@ -10,7 +10,7 @@ namespace ACETreeGenerator
         static string connectionString = "server=127.0.0.1;user=acedockeruser;password=2020acEmulator2017;database=ace_shard;applicationname=acetreegenerator";
 
         // Choose this as you like
-        static uint max_depth = 2;
+        static uint max_depth = 3;
 
         // Configuration you don't have to change
         static string name_prefix = "Z"; // Names are "{name_prefix}{id}"
@@ -75,25 +75,24 @@ INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({
 
         static void CreateTree(StringWriter writer, uint account_id, uint monarch_id)
         {
-            uint id_left = NextId();
-            CreateNode(writer, 2, account_id, id_left, $"{name_prefix}{id_left}", monarch_id, monarch_id);
-            uint id_right = NextId();
-            CreateNode(writer, 2, account_id, id_right, $"{name_prefix}{id_right}", monarch_id, monarch_id);
+            CreateNode(writer, 2, account_id, monarch_id, monarch_id);
+            CreateNode(writer, 2, account_id, monarch_id, monarch_id);
         }
-        static void CreateNode(StringWriter writer, uint depth, uint account_id, uint id, string name, uint patron_id, uint monarch_id)
+        static void CreateNode(StringWriter writer, uint depth, uint account_id, uint patron_id, uint monarch_id)
         {
             if (depth > max_depth)
             {
                 return;
             }
 
+            // Determine next ID and name
+            uint id = NextId();
+            string name = $"{name_prefix}{id}";
             writer.WriteLine(QueryForNode(account_id, id, name, patron_id, monarch_id));
 
             // Create two vassals for this node
-            uint id_left = NextId();
-            uint id_right = NextId();
-            CreateNode(writer, depth + 1, account_id, id_left, $"{name_prefix}{id_left}", id, monarch_id);
-            CreateNode(writer, depth + 1, account_id, id_right, $"{name_prefix}{id_right}", id, monarch_id);
+            CreateNode(writer, depth + 1, account_id, id, monarch_id);
+            CreateNode(writer, depth + 1, account_id, id, monarch_id);
         }
         static uint GetAccount(MySqlConnection connection)
         {
