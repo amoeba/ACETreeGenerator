@@ -9,8 +9,14 @@ namespace ACETreeGenerator
         // Set up your database credentials here
         static string connectionString = "server=127.0.0.1;user=root;password=;database=ace_shard;applicationname=acetreegenerator";
 
+        // Pick a character to be the monarch
+        //
+        // The main reason we require this is because creating a character from scratch
+        // that you can also log in as takes a lot more SQL than I want to write
+        static uint monarch_id = 1342177290;
+
         // Choose this as you like
-        static uint max_depth = 3;
+        static uint max_depth = 10;
 
         // Configuration you don't have to change
         static string name_prefix = "Z"; // Names are "{name_prefix}{id}"
@@ -45,15 +51,6 @@ DELETE FROM ace_shard.biota_properties_string WHERE Object_Id >= {object_id_star
 DELETE FROM ace_shard.biota_properties_int WHERE Object_Id >= {object_id_start};
 DELETE FROM ace_shard.biota_properties_i_i_d WHERE Object_Id >= {object_id_start};";
         }
-        static string QueryForMonarch(uint account_id, uint id, string name)
-        {
-            return @$"INSERT INTO ace_shard.character (id, account_Id, name, is_Plussed, is_Deleted) VALUES ('{id}', '{account_id}', '{name}', 0, 0);
-INSERT INTO  ace_shard.biota (id, weenie_Class_Id, weenie_Type) VALUES ('{id}', '1', '10');
-INSERT INTO  ace_shard.biota_properties_string (object_Id, type, value) VALUES ('{id}', '1', '{name}');
-INSERT INTO  ace_shard.biota_properties_int (object_Id, type, value) VALUES ('{id}', '188', '{heritage_id}');
-INSERT INTO  ace_shard.biota_properties_int (object_Id, type, value) VALUES ('{id}', '113', '{gender_id}');
-INSERT INTO  ace_shard.biota_properties_int (object_Id, type, value) VALUES ('{id}', '25', '{character_level}');";
-        }
 
         static string QueryForNode(uint account_id, uint id, string name, uint patron_id, uint monarch_id)
         {
@@ -66,12 +63,6 @@ INSERT INTO  ace_shard.biota_properties_int (object_Id, type, value) VALUES ('{i
 INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({id}, 25, {patron_id});
 INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({id}, 26, {monarch_id});";
         }
-
-        static void CreateMonarch(StringWriter writer, uint account_id, uint id, string name)
-        {
-            writer.WriteLine(QueryForMonarch(account_id, id, name));
-        }
-
 
         static void CreateTree(StringWriter writer, uint account_id, uint monarch_id)
         {
@@ -98,7 +89,7 @@ INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({
         {
             try
             {
-                using (var cmd = new MySqlCommand("SELECT accountId, accountName FROM ace_auth.account LIMIT 1;", connection))
+                using (var cmd = new MySqlCommand("SELECT accountId, accountName FROM ace_auth.account ORDER BY accountId ASC LIMIT 1;", connection))
                 {
                     var reader = cmd.ExecuteReader();
                     reader.Read();
@@ -139,10 +130,6 @@ INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({
                 StringWriter stringWriter = new StringWriter();
                 StartTransaction(stringWriter);
                 stringWriter.WriteLine(QueryForReset());
-
-                // Create monarch
-                uint monarch_id = NextId();
-                CreateMonarch(stringWriter, account_id, monarch_id, $"{name_prefix}M");
 
                 // Create tree
                 CreateTree(stringWriter, account_id, monarch_id);
