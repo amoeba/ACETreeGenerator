@@ -1,4 +1,5 @@
-﻿using MySqlConnector;
+﻿using System.IO;
+using MySqlConnector;
 
 namespace ACETreeGenerator
 {
@@ -8,6 +9,9 @@ namespace ACETreeGenerator
         //
         // Set up your database credentials here
         static string connectionString = "server=127.0.0.1;user=root;password=;database=ace_shard;applicationname=acetreegenerator";
+
+        // Pick an account that monarch_id (below) is a member of
+        static uint account_id = 1;
 
         // Pick a character to be the monarch
         //
@@ -64,6 +68,11 @@ INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({
 INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({id}, 26, {monarch_id});";
         }
 
+        static void ResetTree(StringWriter writer)
+        {
+            writer.WriteLine(QueryForReset());
+        }
+
         static void CreateTree(StringWriter writer, uint account_id, uint monarch_id)
         {
             CreateNode(writer, 2, account_id, monarch_id, monarch_id);
@@ -79,6 +88,8 @@ INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({
             // Determine next ID and name
             uint id = NextId();
             string name = $"{name_prefix}{id}";
+
+            // Create current node (character)
             writer.WriteLine(QueryForNode(account_id, id, name, patron_id, monarch_id));
 
             // Create two vassals for this node
@@ -113,29 +124,15 @@ INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({
             using (var connection = new MySqlConnection(connectionString))
             {
                 connection.Open();
-
-                Console.WriteLine("1/3: Finding account...");
-                // Find an account to use
-                var account_id = GetAccount(connection);
-                if (account_id == 0)
-                {
-                    Console.WriteLine("Couldn't find an account to use. Does an account exist in the database?");
-                    return;
-                }
-                Console.WriteLine("...Done");
+                StringWriter stringWriter = new StringWriter();
 
                 // Generate the SQL to make the tree
-                Console.WriteLine("2/3: Creating tree...");
-
-                StringWriter stringWriter = new StringWriter();
+                Console.WriteLine("1/2: Creating tree...");
                 StartTransaction(stringWriter);
-                stringWriter.WriteLine(QueryForReset());
-
-                // Create tree
+                ResetTree(stringWriter);
                 CreateTree(stringWriter, account_id, monarch_id);
-
-                // Commit
                 EndTransaction(stringWriter);
+                Console.WriteLine("...Tree created.");
 
                 // Write SQL file just for debugging
                 string path = "tree.sql";
@@ -146,7 +143,6 @@ INSERT INTO  ace_shard.biota_properties_i_i_d (object_Id, type, value) VALUES ({
                     streamWriter.Write(stringWriter.ToString());
                 }
 
-                Console.WriteLine("...Tree created.");
                 Console.WriteLine("3/3: Inserting into database...");
 
                 using (MySqlTransaction transaction = connection.BeginTransaction())
