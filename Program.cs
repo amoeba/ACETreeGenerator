@@ -7,7 +7,7 @@ namespace ACETreeGenerator
         // Configuration you must change
         //
         // Set up your database credentials here
-        static string connectionString = "server=127.0.0.1;user=acedockeruser;password=2020acEmulator2017;database=ace_shard;applicationname=acetreegenerator";
+        static string connectionString = "server=127.0.0.1;user=root;password=;database=ace_shard;applicationname=acetreegenerator";
 
         // Choose this as you like
         static uint max_depth = 3;
